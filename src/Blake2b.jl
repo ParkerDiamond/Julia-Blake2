@@ -1,26 +1,28 @@
-mutable struct Blake2bContext
+using StaticArrays
+
+struct Blake2bContext
     b::Vector{UInt8}     # input buffer; len = 128
-    h::Vector{UInt64}    # chained state; len = 8
-    t::Vector{UInt64}    # total number of bytes; len = 2
-    c::UInt64            # pointer for b[]
+    h::MVector{8,UInt64}    # chained state; len = 8
+    t::MVector{2,UInt64}    # total number of bytes; len = 2
+    c::MVector{1,UInt64}    # pointer for b[]
     outlen::UInt64       # digest size
 end
 
 # Mixing function G from the RFC
-function Blake2bMix!(v::Vector{UInt64}, a::Integer, b::Integer, c::Integer, d::Integer, x::UInt64, y::UInt64)
+@inline function Blake2bMix!(v::Vector{UInt64}, a::Integer, b::Integer, c::Integer, d::Integer, x::UInt64, y::UInt64)
     v[a] = v[a] + v[b] + x
-    v[d] = ror(xor(v[d], v[a]), 32)
+    v[d] = bitrotate(xor(v[d], v[a]), -32)
     v[c] = v[c] + v[d]
-    v[b] = ror(xor(v[b], v[c]), 24)
+    v[b] = bitrotate(xor(v[b], v[c]), -24)
     v[a] = v[a] + v[b] + y
-    v[d] = ror(xor(v[d], v[a]), 16)
+    v[d] = bitrotate(xor(v[d], v[a]), -16)
     v[c] = v[c] + v[d]
-    v[b] = ror(xor(v[b], v[c]), 63)
+    v[b] = bitrotate(xor(v[b], v[c]), -63)
 end
 
 # Compression function. "last" flag indicates last block.
 function Blake2bCompress!(ctx::Blake2bContext, last::Bool)
-    sigma::Matrix{UInt8} = [  
+    sigma::SMatrix{12, 16, UInt8} = [  
      1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
     15  11   5   9  10  16  14   7   2  13   1   3  12   8   6   4
     12   9  13   1   6   3  16  14  11  15   4   7   8   2  10   5
@@ -81,13 +83,13 @@ function Blake2bInit!(ctx::Blake2bContext, outlen::Integer, key::Vector{UInt8}, 
     ]
     ctx.h[1] = xor(xor(xor(ctx.h[1], 0x01010000), (keylen << 8)), outlen)
     ctx.t = [0,0]
-    ctx.c = 0
+    ctx.c = [0]
     ctx.outlen = outlen
     ctx.b = zeros(UInt8, 128)
 
     if keylen > 0
         Blake2bUpdate!(ctx, key, keylen)
-        ctx.c = 128                  # at the end
+        ctx.c[1] = 128                  # at the end
     end
 
     return ctx
@@ -99,19 +101,19 @@ end
 function Blake2bInit(outlen::Integer, key::Vector{UInt8}, keylen::Integer)::Blake2bContext # (keylen=0: no key)
     @assert (outlen != 0 && outlen <= 64 && keylen <= 64) "Invalid Parameters"
 
-    IV::Vector{UInt64} = [
+    IV::MVector{8, UInt64} = [
         0x6A09E667F3BCC908, 0xBB67AE8584CAA73B,
         0x3C6EF372FE94F82B, 0xA54FF53A5F1D36F1,
         0x510E527FADE682D1, 0x9B05688C2B3E6C1F,
         0x1F83D9ABFB41BD6B, 0x5BE0CD19137E2179
     ]
 
-    ctx::Blake2bContext = Blake2bContext(zeros(UInt8, 128), IV, zeros(UInt64, 2), 0, outlen)
+    ctx::Blake2bContext = Blake2bContext(zeros(UInt8, 128), IV, zeros(UInt64, 2), zeros(UInt64, 1), outlen)
     ctx.h[1] = xor(xor(xor(ctx.h[1], 0x01010000), (keylen << 8)), outlen)
 
     if keylen > 0
         Blake2bUpdate!(ctx, key, keylen)
-        ctx.c = 128                  # at the end
+        ctx.c[1] = 128                  # at the end
     end
 
     return ctx
@@ -120,28 +122,28 @@ end
 # Add "inlen" bytes from "in" into the hash.
 function Blake2bUpdate!(ctx::Blake2bContext, in::Vector{UInt8}, inlen::Integer) # data bytes
     for i = 1:inlen
-        if ctx.c == 128                # buffer full ?
-            ctx.t[1] += ctx.c          # add counters
-            if (ctx.t[1] < ctx.c)       # carry overflow ?
+        if ctx.c[1] == 128                # buffer full ?
+            ctx.t[1] += ctx.c[1]          # add counters
+            if (ctx.t[1] < ctx.c[1])       # carry overflow ?
                 ctx.t[2] += 1          # high word
             end
             Blake2bCompress!(ctx, false)   # compress (not last)
-            ctx.c = 0                  # counter to zero
+            ctx.c[1] = 0                  # counter to zero
         end
-        ctx.b[ctx.c+1] = in[i]
-        ctx.c += 1
+        ctx.b[ctx.c[1]+1] = in[i]
+        ctx.c[1] += 1
     end
 end
 
 function Blake2bFinal!(ctx::Blake2bContext, out::Vector{UInt8})
-    ctx.t[1] += ctx.c                # mark last block offset
-    if (ctx.t[1] < ctx.c)             # carry overflow
+    ctx.t[1] += ctx.c[1]                # mark last block offset
+    if (ctx.t[1] < ctx.c[1])             # carry overflow
         ctx.t[1] += 1                 # high word
     end
 
-    while (ctx.c < 128)                # fill up with zeros
-        ctx.b[ctx.c+1] = 0
-        ctx.c += 1
+    while (ctx.c[1] < 128)                # fill up with zeros
+        ctx.b[ctx.c[1]+1] = 0
+        ctx.c[1] += 1
     end
     Blake2bCompress!(ctx, true)           # final block flag = 1
     # little endian convert and store

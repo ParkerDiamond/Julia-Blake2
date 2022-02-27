@@ -1,13 +1,6 @@
 using Blake2
 using Test
 
-@testset "CommonTests" begin
-    x::UInt64 = 1
-    y::UInt64 = 2^62
-    @test Blake2.ror(x,1) == y*2
-    @test Blake2.ror(x,1) == Blake2.rol(x,63)
-end
-
 function selftest_seq(out::Vector{UInt8}, len::Integer, seed::UInt32)
     t::UInt32 = 0
     a::UInt32 = 0xDEAD4BAD * seed           # prime

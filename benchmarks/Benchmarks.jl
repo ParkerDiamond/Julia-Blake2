@@ -16,7 +16,8 @@ suite["Blake2b"]["Blake2b512Keyless"] = @benchmarkable Blake2.Blake2b!($md, leng
 # Run All Benchmarks
 
 function BenchmarkAll()
-    tune!(suite)
+    @benchmark Blake2.Blake2b!(md, 64, key, 0, in, 64) setup=((md,key,in)=(zeros(UInt8, 64),zeros(UInt8, 0),rand(UInt8, 64)))
+    # tune!(suite)
 end
 
 end
