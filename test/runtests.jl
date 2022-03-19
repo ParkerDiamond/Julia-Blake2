@@ -67,3 +67,41 @@ end
 
     @test md[1:32] == blake2b_res
 end
+
+@testset "Blake2s" begin
+    # grand hash of hash results
+    blake2s_res::Vector{UInt8} = [
+        0x6A, 0x41, 0x1F, 0x08, 0xCE, 0x25, 0xAD, 0xCD,
+        0xFB, 0x02, 0xAB, 0xA6, 0x41, 0x45, 0x1C, 0xEC,
+        0x53, 0xC5, 0x98, 0xB2, 0x4F, 0x4F, 0xC7, 0x87,
+        0xFB, 0xDC, 0x88, 0x79, 0x7F, 0x4C, 0x1D, 0xFE
+    ]
+
+    # parameter sets
+    b2s_md_len::Vector{UInt64} = [16, 20, 28, 32]
+    b2s_in_len::Vector{UInt64} = [0, 3, 64, 65, 255, 1024]
+
+    # 256-bit hash for testing
+    md = zeros(UInt8, 32)
+    key = zeros(UInt8, 32)
+    in = zeros(UInt8, 1024)
+
+    ctx = Blake2.Blake2sInit(32, key, 0)
+
+    for outlen::UInt64 in b2s_md_len
+        for inlen::UInt64 in b2s_in_len
+            selftest_seq(in, inlen, UInt32(inlen))    # unkeyed, hash
+            Blake2.Blake2s!(md, outlen, key, 0, in, inlen)
+            Blake2.Blake2sUpdate!(ctx, md, outlen)   # hash the hash
+
+            selftest_seq(key, outlen, UInt32(outlen))  # keyed, hash
+            Blake2.Blake2s!(md, outlen, key, outlen, in, inlen)
+            Blake2.Blake2sUpdate!(ctx, md, outlen)   # hash the hash
+        end
+    end
+
+    # compute and compare the hash of hashes
+    Blake2.Blake2sFinal!(ctx, md);
+
+    @test md[1:32] == blake2s_res
+end

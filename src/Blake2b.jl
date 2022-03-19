@@ -1,15 +1,16 @@
 using StaticArrays
 
+### BEGIN RFC API ###
+
 struct Blake2bContext
-    b::Vector{UInt8}     # input buffer; len = 128
+    b::Vector{UInt8}        # input buffer; len = 128
     h::MVector{8,UInt64}    # chained state; len = 8
     t::MVector{2,UInt64}    # total number of bytes; len = 2
     c::MVector{1,UInt64}    # pointer for b[]
-    outlen::UInt64       # digest size
+    outlen::UInt64          # digest size
 end
 
-# Mixing function G from the RFC
-@inline function Blake2bMix!(v::Vector{UInt64}, a::Integer, b::Integer, c::Integer, d::Integer, x::UInt64, y::UInt64)
+@inline function B2B_G!(v::Vector{UInt64}, a::Integer, b::Integer, c::Integer, d::Integer, x::UInt64, y::UInt64)
     v[a] = v[a] + v[b] + x
     v[d] = bitrotate(xor(v[d], v[a]), -32)
     v[c] = v[c] + v[d]
@@ -54,14 +55,14 @@ function Blake2bCompress!(ctx::Blake2bContext, last::Bool)
     m::Vector{UInt64} = reinterpret(UInt64, ctx.b)
 
     for i = 1:12         # twelve rounds
-        Blake2bMix!(v, 1, 5, 9, 13, m[sigma[i, 1]], m[sigma[i, 2]])
-        Blake2bMix!(v, 2, 6, 10, 14, m[sigma[i, 3]], m[sigma[i, 4]])
-        Blake2bMix!(v, 3, 7, 11, 15, m[sigma[i, 5]], m[sigma[i, 6]])
-        Blake2bMix!(v, 4, 8, 12, 16, m[sigma[i, 7]], m[sigma[i, 8]])
-        Blake2bMix!(v, 1, 6, 11, 16, m[sigma[i, 9]], m[sigma[i, 10]])
-        Blake2bMix!(v, 2, 7, 12, 13, m[sigma[i, 11]], m[sigma[i, 12]])
-        Blake2bMix!(v, 3, 8, 9, 14, m[sigma[i, 13]], m[sigma[i, 14]])
-        Blake2bMix!(v, 4, 5, 10, 15, m[sigma[i, 15]], m[sigma[i, 16]])
+        B2B_G!(v, 1, 5, 9, 13, m[sigma[i, 1]], m[sigma[i, 2]])
+        B2B_G!(v, 2, 6, 10, 14, m[sigma[i, 3]], m[sigma[i, 4]])
+        B2B_G!(v, 3, 7, 11, 15, m[sigma[i, 5]], m[sigma[i, 6]])
+        B2B_G!(v, 4, 8, 12, 16, m[sigma[i, 7]], m[sigma[i, 8]])
+        B2B_G!(v, 1, 6, 11, 16, m[sigma[i, 9]], m[sigma[i, 10]])
+        B2B_G!(v, 2, 7, 12, 13, m[sigma[i, 11]], m[sigma[i, 12]])
+        B2B_G!(v, 3, 8, 9, 14, m[sigma[i, 13]], m[sigma[i, 14]])
+        B2B_G!(v, 4, 5, 10, 15, m[sigma[i, 15]], m[sigma[i, 16]])
     end
 
     for i = 1:8
@@ -86,30 +87,6 @@ function Blake2bInit!(ctx::Blake2bContext, outlen::Integer, key::Vector{UInt8}, 
     ctx.c = [0]
     ctx.outlen = outlen
     ctx.b = zeros(UInt8, 128)
-
-    if keylen > 0
-        Blake2bUpdate!(ctx, key, keylen)
-        ctx.c[1] = 128                  # at the end
-    end
-
-    return ctx
-end
-
-# Initialize the hashing context "ctx" with optional key "key".
-# 1 <= outlen <= 64 gives the digest size in bytes.
-# Secret key (also <= 64 bytes) is optional (keylen = 0).
-function Blake2bInit(outlen::Integer, key::Vector{UInt8}, keylen::Integer)::Blake2bContext # (keylen=0: no key)
-    @assert (outlen != 0 && outlen <= 64 && keylen <= 64) "Invalid Parameters"
-
-    IV::MVector{8, UInt64} = [
-        0x6A09E667F3BCC908, 0xBB67AE8584CAA73B,
-        0x3C6EF372FE94F82B, 0xA54FF53A5F1D36F1,
-        0x510E527FADE682D1, 0x9B05688C2B3E6C1F,
-        0x1F83D9ABFB41BD6B, 0x5BE0CD19137E2179
-    ]
-
-    ctx::Blake2bContext = Blake2bContext(zeros(UInt8, 128), IV, zeros(UInt64, 2), zeros(UInt64, 1), outlen)
-    ctx.h[1] = xor(xor(xor(ctx.h[1], 0x01010000), (keylen << 8)), outlen)
 
     if keylen > 0
         Blake2bUpdate!(ctx, key, keylen)
@@ -157,4 +134,30 @@ function Blake2b!(out::Vector{UInt8}, outlen::Integer, key::Vector{UInt8}, keyle
     Blake2bUpdate!(ctx, in, inlen)
     Blake2bFinal!(ctx, out)
     return out
+end
+
+### END RFC API
+
+# Initialize the hashing context "ctx" with optional key "key".
+# 1 <= outlen <= 64 gives the digest size in bytes.
+# Secret key (also <= 64 bytes) is optional (keylen = 0).
+function Blake2bInit(outlen::Integer, key::Vector{UInt8}, keylen::Integer)::Blake2bContext # (keylen=0: no key)
+    @assert (outlen != 0 && outlen <= 64 && keylen <= 64) "Invalid Parameters"
+
+    IV::MVector{8, UInt64} = [
+        0x6A09E667F3BCC908, 0xBB67AE8584CAA73B,
+        0x3C6EF372FE94F82B, 0xA54FF53A5F1D36F1,
+        0x510E527FADE682D1, 0x9B05688C2B3E6C1F,
+        0x1F83D9ABFB41BD6B, 0x5BE0CD19137E2179
+    ]
+
+    ctx::Blake2bContext = Blake2bContext(zeros(UInt8, 128), IV, zeros(UInt64, 2), zeros(UInt64, 1), outlen)
+    ctx.h[1] = xor(xor(xor(ctx.h[1], 0x01010000), (keylen << 8)), outlen)
+
+    if keylen > 0
+        Blake2bUpdate!(ctx, key, keylen)
+        ctx.c[1] = 128                  # at the end
+    end
+
+    return ctx
 end
