@@ -1,5 +1,8 @@
 # Julia-Blake2
-Julia-Blake2 is a pure Julia implementation of the Blake2 Hash and MAC scheme. The code is largely a port of the C implementation provided by the authors of RFC 7693, which can be found at https://datatracker.ietf.org/doc/html/rfc7693. The IETF RFC Document and Code Components are distributed under the Revised BSd License, which is detailed below:
+Julia-Blake2 is a pure Julia implementation of the Blake2 Hash and MAC scheme. 
+
+The code is largely a port of the C implementation provided by the authors of RFC 7693, which can be found at https://datatracker.ietf.org/doc/html/rfc7693. The IETF RFC Document and Code Components are distributed under the Revised BSD License, which is detailed below:
+    
     Copyright (c) 2022 IETF Trust and the persons identified as authors of the code. 
     All rights reserved. Redistribution and use in source and binary forms, with or without modification, 
     are permitted provided that the following conditions are met:
